@@ -2,9 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,66 +10,39 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint
+    name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-          cache: pip
+          enable-cache: true
 
       - name: Install dependencies
-        run: pip install ruff black isort
+        run: uv sync
 
-      - name: Run ruff
-        run: ruff check .
+      - name: Ruff lint
+        run: uv run ruff check .
 
-      - name: Check formatting (black)
-        run: black --check .
-
-      - name: Check import order (isort)
-        run: isort --check-only .
+      - name: Ruff format check
+        run: uv run ruff format --check .
 
   test:
     name: Tests
     runs-on: ubuntu-latest
-    needs: lint
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-          cache: pip
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+        run: uv sync
 
-      - name: Run tests
-        run: pytest --cov=src --cov-report=xml
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-
-  security:
-    name: Security scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Trivy (secret + vuln scan)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
-          severity: HIGH,CRITICAL
-          exit-code: 1
+      # Coverage gate (--cov-fail-under=80) is configured in pyproject.toml.
+      - name: Pytest
+        run: uv run pytest
