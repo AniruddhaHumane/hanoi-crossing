@@ -53,19 +53,19 @@ gets an `Observation` and the legal actions, never the full state.
 
 ```mermaid
 flowchart LR
-    S[("GameState<br/>(god's-eye)")]
-    O["Observation<br/>(player's view)"]
-    P["Policy / Agent<br/>(random now, RL later)"]
+    S[("GameState<br/>full state")]
+    O["Observation<br/>player view"]
+    P["Policy or Agent<br/>random now, RL later"]
 
-    subgraph Driver["Driver / frontend — holds full state, owns turn order"]
+    subgraph Driver["Driver / frontend: holds full state, owns turn order"]
         S
     end
 
     S -- "observe(state, P)" --> O
     O -- "legal_actions(obs)" --> P
-    P -- "step(state, P, action) → StepResult" --> S
+    P -- "step(state, P, action)" --> S
 
-    O -. "agent sees only obs + legal actions,<br/>never hidden state" .- P
+    O -. "agent sees only obs and legal actions, never hidden state" .- P
 ```
 
 Because of that, the same engine can back an RL loop or a many-game simulation
