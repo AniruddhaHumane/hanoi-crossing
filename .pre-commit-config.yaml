@@ -1,0 +1,29 @@
+# Pre-commit hooks: hygiene + ruff (lint & format).
+# Fast checks only — the full pytest suite runs in CI (see .github/workflows),
+# which keeps commits quick and allows committing failing tests first (TDD).
+# ruff runs via `uv run` so it uses the exact version pinned in uv.lock.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        require_serial: true
