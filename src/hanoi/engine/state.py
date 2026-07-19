@@ -1,6 +1,6 @@
 """Immutable full game state and the starting position.
 
-Design contract (see docs/DESIGN.md, docs/design-decisions/):
+Design notes (see docs/design-decisions/):
 - `GameState` is the god's-eye view: all five physical poles, both hands,
   and terminal/winner flags. It is a frozen pydantic model — never mutate it;
   build a new one (use `model_copy` at boundaries, `model_construct` on the

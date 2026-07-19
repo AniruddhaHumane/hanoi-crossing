@@ -1,0 +1,6 @@
+# Spec N=1 example: A wins in three moves.
+# Each line is "<player> <verb> [pole]"; the player column is the turn order.
+n 1
+A lift 1
+B lift 1
+A place 3

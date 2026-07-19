@@ -1,0 +1,11 @@
+# N=2: a win completed by the OTHER player's move.
+# A stacks disk 3 on pole 3 but leaves disk 1 on the shared pole, so A is not
+# yet winning. When B lifts that disk off the shared pole it clears the shared
+# pole and completes A's win on B's turn -- which is why the engine checks both
+# players after every move.
+n 2
+A lift 1
+A place 2
+A lift 1
+A place 3
+B lift 2
