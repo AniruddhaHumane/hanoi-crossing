@@ -11,20 +11,27 @@ from pydantic import BaseModel, ConfigDict, Field
 from hanoi.engine.state import LocalPole
 
 
-class Lift(BaseModel):
-    model_config = ConfigDict(frozen=True)
+class _Action(BaseModel):
+    """Shared config: immutable, and strict about unknown fields.
+
+    `extra="forbid"` rejects malformed input at the boundary — e.g. a skip that
+    carries a pole, or an action with junk fields — instead of silently ignoring.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class Lift(_Action):
     kind: Literal["lift"] = "lift"
     pole: LocalPole
 
 
-class Place(BaseModel):
-    model_config = ConfigDict(frozen=True)
+class Place(_Action):
     kind: Literal["place"] = "place"
     pole: LocalPole
 
 
-class Skip(BaseModel):
-    model_config = ConfigDict(frozen=True)
+class Skip(_Action):
     kind: Literal["skip"] = "skip"
 
 

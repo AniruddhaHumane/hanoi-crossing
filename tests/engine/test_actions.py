@@ -60,3 +60,21 @@ def test_action_json_round_trips():
     for action in (Lift(pole=1), Place(pole=3), Skip()):
         restored = adapter.validate_json(adapter.dump_json(action))
         assert restored == action
+
+
+def test_skip_rejects_a_pole_field():
+    # a skip carrying a pole is malformed input, not a valid Skip
+    with pytest.raises(ValidationError):
+        Skip(pole=3)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"kind": "skip", "pole": 3},  # skip must not carry a pole
+        {"kind": "lift", "pole": 1, "junk": 9},  # unknown fields rejected
+    ],
+)
+def test_action_union_rejects_extra_fields(payload):
+    with pytest.raises(ValidationError):
+        TypeAdapter(Action).validate_python(payload)
