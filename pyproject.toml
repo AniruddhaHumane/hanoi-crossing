@@ -11,8 +11,10 @@ dependencies = [
     "rich>=13.7",
 ]
 
-[project.scripts]
-hanoi = "hanoi.cli:app"
+# NOTE: the `hanoi` CLI entry point is deferred until the cli module exists,
+# so an installed environment never exposes a command that fails to import.
+# [project.scripts]
+# hanoi = "hanoi.cli:app"
 
 [dependency-groups]
 dev = [
