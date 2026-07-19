@@ -33,7 +33,9 @@ def test_player_and_verb_are_case_insensitive():
 @pytest.mark.parametrize(
     "text, needle",
     [
-        ("A lift 1\n", "header"),  # missing n header
+        ("A lift 1\n", "header"),  # first line isn't the n header
+        ("# only a comment\n", "header"),  # no header line at all
+        ("n 1\nA\n", "missing verb"),  # player token with no verb
         ("n zero\n", "integer"),  # non-integer N
         ("n 0\n", ">= 1"),  # N < 1
         ("n 1\nC lift 1\n", "unknown player"),  # bad player
