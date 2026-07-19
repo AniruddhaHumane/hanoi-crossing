@@ -1,81 +1,78 @@
 # Development log
 
-A concise record of the journey: decisions, insights, and what tripped me up.
-Detailed rationale for the two biggest calls lives in `docs/design-decisions/`.
+Rough notes on how this went: the decisions, the things I got wrong first, and
+what I'd still improve. The two big rule calls have their own write-ups in
+`docs/design-decisions/`.
 
-## Approach
+## How I built it
 
-Design-first, then test-first per module. Build order followed the dependency
-graph: `state → actions → observation → rules → frontends`, each written as a
-failing test suite before the implementation. Every slice went through its own
-branch, PR, and CI run.
+Design first, then one module at a time in dependency order: state, actions,
+observation, rules, then the frontends. Tests came before each implementation,
+and each piece went on its own branch through a PR and CI.
 
-## Key decisions and why
+## Decisions
 
-- **Win = literal / visible-only** (`design-decisions/0001`). The win is a pure
-  property of a player's visible poles (`hand empty ∧ pole1 empty ∧ SHARED empty
-  ∧ pole3 non-empty`). Tracking disk ownership added complexity the brief didn't
-  ask for, and the literal rule still forces a real solve — you can't clear
-  pole 1 and the shared pole without moving your disks to pole 3 (or losing
-  them).
-- **Player-relative pole addressing.** Each player only ever names `pole 1/2/3`
-  (pole 2 = shared). The engine maps `(player, local) → physical`. This makes
-  hidden information *structural*: a player literally cannot name the opponent's
-  poles, and both players share one symmetric 7-action space — ideal for
-  self-play RL later.
-- **Pure, immutable core behind an observation boundary.** `step` is a pure
-  function returning a new state; agents receive only an `Observation`. This is
-  the single design choice that lets the engine double as an RL env or a
-  concurrent sim with no changes.
+Win condition. I made it literal and visible-only (hand empty, pole 1 empty,
+shared empty, pole 3 non-empty). Tracking who owns which disk was more machinery
+than the brief needed, and the literal rule still forces a real solve: you can't
+clear pole 1 and the shared pole without getting your disks onto pole 3 (or
+losing them).
 
-## Insights and gotchas
+Player-relative poles. Each player only names pole 1/2/3 and the engine maps that
+to the physical pole. This makes hidden information structural instead of a check
+I have to remember: a player can't even refer to the opponent's poles, and both
+players get the same 7-action space, which is handy for self-play later.
 
-- **Globally-unique disk sizes remove all ties.** A owns odds, B owns evens, so
-  any two disks — even across players on the shared pole — have a strict order.
-  The Hanoi placement rule is therefore always well-defined; no tie-breaking on
-  equal sizes is ever needed.
-- **Frozen ≠ deeply immutable.** My first `GameState` stored poles in a `dict`.
-  A frozen pydantic model blocks attribute *reassignment* but not in-place dict
-  *mutation* (`state.poles[p] = ...` still worked). I switched to per-pole tuple
-  fields (`a1, a3, b1, b3, shared`) plus hand fields, making the state genuinely
-  immutable with no extra machinery.
-- **A win can be triggered by the opponent.** Because the win is local to
-  visible poles, one player's move can complete the other's win (e.g. B lifting
-  a stray disk off the shared pole clears it and wins for A). So the engine
-  checks *both* players after every step, not just the mover.
-- **An empty board is not a win.** If a player's disks get stranded on the
-  hidden side and pole 3 ends empty, the "pole 3 non-empty" clause correctly
-  reports *no win* — that's a lost position, not a victory.
-- **The simultaneous-win tie is unreachable.** Completing a win needs the shared
-  pole empty *and* an empty hand; a single move can't leave both players newly
-  satisfying that. I encode the "actor wins ties" rule implicitly by checking
-  the actor first, avoiding an untestable branch.
+Pure, immutable core. `step` returns a new state and agents only see an
+`Observation`. That's the one thing that lets this double as an RL environment or
+a concurrent simulation without changes.
 
-## Challenges
+## Things I learned or got wrong first
 
-- **Test-first vs a pytest pre-commit gate.** A pre-commit hook that runs the
-  tests will reject the intentionally-failing "RED" commit of a test-first flow.
-  Resolved by scoping pre-commit to fast checks (ruff + hygiene) and running the
-  test suite in CI — the standard split — which also lets the git history show a
-  clean green → red → green per feature.
-- **CI required-check naming.** Branch protection required a check named `Lint`
-  while the job reported as `Lint (ruff)`; the mismatch silently blocked merges
-  until the job was renamed.
+Globally-unique disk sizes remove ties. A has odds, B has evens, so any two disks
+have a strict order, even across players on the shared pole. No tie-breaking on
+equal sizes is ever needed.
 
-## Performance & limitations (honest)
+Frozen isn't deeply immutable. My first `GameState` stored the poles in a dict. A
+frozen pydantic model stops you reassigning the attribute but not mutating the
+dict in place (`state.poles[p] = ...` still worked). I switched to one tuple
+field per pole, which makes it genuinely immutable with no extra code.
 
-- **Per-step allocation cost.** Replaying 1,000,000 moves took ~13.6 s and
-  ~1.1 GB peak RSS, because each `step` builds a fresh immutable state and
-  pydantic validates on construction. For a hot RL loop this is the thing to
-  optimise first — `model_construct`/`model_copy` skip re-validation on the
-  trusted path; a further step would be lighter-weight state objects.
-- **No cap on N.** `initial_state` validates `n ≥ 1` but not an upper bound, so a
-  pathologically large N (e.g. 10⁸) will exhaust memory. A real service would
-  bound N at the boundary.
+A win can be triggered by the opponent. Since the win only looks at your own
+visible poles, the other player's move can complete it: B lifting a stray disk
+off the shared pole clears it and wins for A. So the engine checks both players
+after every step, not just the mover.
 
-## Testing
+An empty board isn't a win. If your disks get stranded on the hidden side and
+pole 3 ends up empty, the "pole 3 non-empty" clause correctly says no win. That's
+a lost position, not a victory.
 
-91 tests, ~96% coverage: engine units (setup, mapping, accessors, legality,
-immutability, win detection, terminal freeze, the spec N=1 game), plus frontend
-tests for the DSL parser, the random player (determinism, only-legal moves), and
-both CLI commands.
+The simultaneous-win tie can't actually happen. Finishing a win needs the shared
+pole empty and an empty hand, and a single move can't leave both players newly in
+that state. I check the mover first so the "mover wins" rule is there, but it's
+effectively dead code.
+
+## Snags
+
+Test-first vs a pytest pre-commit hook. If the hook runs the tests, it rejects
+the deliberately-failing "red" commit. I moved the suite to CI and kept
+pre-commit to fast checks (ruff + hygiene), which is the usual split and also
+lets the history show a clean red-then-green per feature.
+
+CI check naming. Branch protection wanted a check called `Lint` while the job
+reported as `Lint (ruff)`; the mismatch silently blocked merges until I renamed
+the job.
+
+## Performance and limits
+
+Replaying 1,000,000 moves took about 14s and ~1.1GB here, because every step
+builds a fresh immutable state. For a hot RL loop that's the first thing to
+optimise (see Future work in the README). There's also no upper bound on N, so a
+huge N will run out of memory; a real service would cap it.
+
+## Tests
+
+95 tests, ~97% coverage: engine units, property-based invariants (disk
+conservation, pole ordering, hand <= 1) checked after random and legal move
+sequences, and frontend tests for the parser, the random player, and both CLI
+commands.
