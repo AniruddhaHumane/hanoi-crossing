@@ -138,39 +138,59 @@ uv run pre-commit install   # ruff + hygiene on commit; tests run in CI
 
 ## Future work
 
-None of this is built (the brief said not to), but here's where I'd take it.
+None of this is built (the brief said not to), but the following would be
+worthwhile.
 
-Performance. Replaying 1M moves takes about 14s and ~1GB here, mostly per-step
-allocation. The biggest win is replacing the internal legality check (which
-builds an observation and up to 7 action objects every step) with a plain
-`is_legal(state, player, action)` predicate. After that: `model_construct`
-instead of `model_copy` on the copy path, a lighter `StepResult`, and eventually
-a batched `step` for training throughput.
+### Performance
 
-Robustness. `model_validate_json` trusts its input today, so a loaded state isn't
-checked for disk conservation, pole ordering, or `n >= 1`. A `model_validator`
-plus `Field(ge=1)` fixes that, and I'd bound N and replay length (a huge N just
-OOMs right now).
+Replaying 1M moves takes about 14s and ~1GB here, mostly per-step allocation.
 
-RL. The core already gives you reset/observation, the transition, and the legal
-actions. To plug in a real agent you'd add an action-to-index map and a
-fixed-size observation encoder (variable-length tuples can't feed a network),
-then a small Gymnasium `Env` wrapper. The random player already sits at that
-boundary.
+- Replacing the internal legality check (which builds an observation and up to 7
+  action objects every step) with a plain `is_legal(state, player, action)`
+  predicate would be the biggest win.
+- `model_construct` instead of `model_copy` on the copy path, plus a lighter
+  `StepResult`, would cut allocation further.
+- A batched `step` (many games at once) would help training throughput.
 
-Simulation service. Immutable states are thread-safe, so this is mostly
-plumbing: a game store keyed by id, a version tag on the serialized state, and a
-thin API over `step` that persists `model_dump_json()`.
+### Robustness
 
-Tooling. mypy and bandit in CI, and structured logging in the frontends (the
-engine stays pure).
+- `model_validate_json` trusts its input today, so a loaded state is not checked
+  for disk conservation, pole ordering, or `n >= 1`; a `model_validator` plus
+  `Field(ge=1)` would close that.
+- Bounding N and replay length would prevent the out-of-memory a huge N causes.
 
-Deploy. It's a normal uv/pip package with a `hanoi` entry point (`uvx hanoi …`,
-or `pip install .`); a service would containerise it behind an API and a store.
+### RL environment
+
+The core already exposes reset/observation, the transition, and the legal
+actions.
+
+- An action-to-index map and a fixed-size observation encoder would be needed
+  (variable-length tuples cannot feed a network).
+- A small Gymnasium `Env` wrapper would then sit on top. The random player
+  already consumes the engine at that boundary.
+
+### Simulation service
+
+Immutable states are thread-safe, so this is mostly plumbing.
+
+- A game store keyed by id, a version tag on the serialized state, and a thin
+  API over `step` that persists `model_dump_json()` would be enough to run many
+  concurrent games.
+
+### Tooling
+
+- mypy and bandit in CI would add type and security checks.
+- Structured logging in the frontends would help (the engine stays pure).
+
+### Deployment
+
+- The package is uv/pip-installable with a `hanoi` entry point (`uvx hanoi …`,
+  or `pip install .`). A service would containerise the same package behind an
+  API and a state store.
 
 ## AI usage disclosure
 
-Per the brief: I used Claude (Claude Code) for brainstorming the design and the
+Per the brief, I used Claude (Claude Code) for brainstorming the design and the
 ambiguous-rule interpretations, for writing the test cases, and for code review.
 I wrote the implementation, and the design decisions were mine (they're in
 `docs/design-decisions/` and `docs/DEVLOG.md`).
