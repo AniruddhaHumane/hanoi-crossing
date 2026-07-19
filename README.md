@@ -145,6 +145,47 @@ uv run ruff format .        # format
 uv run pre-commit install   # ruff + hygiene on commit (tests run in CI)
 ```
 
+## Future work
+
+The engine is complete and correct; these are the paths to production and to the
+reuse cases the brief describes (deliberately not built here).
+
+**Performance (the RL-critical `step` loop).** Replaying 1M moves takes ~13.6 s /
+~1.1 GB here, dominated by per-step allocation.
+- Replace the internal legality check (`action in legal_actions(observe(...))`,
+  which allocates an observation + up to 7 action objects every step) with an
+  allocation-free `is_legal(state, player, action)` predicate — the largest
+  single win.
+- Use `model_construct` (not `model_copy`) on the copy-on-write path and make
+  `StepResult` a `slots`/`NamedTuple`; for maximum throughput keep pydantic at
+  the boundary only. A vectorised/batched `step` (many games at once) would help
+  training throughput further.
+
+**Robustness.** `model_validate_json` currently trusts input, so a loaded state
+isn't checked for disk conservation, pole ordering, or `n ≥ 1`. Add a
+`model_validator` + `Field(ge=1)`, and bound `N` and replay length at the
+boundaries (a pathologically large `N` OOMs by design today).
+
+**RL environment.** The core already exposes reset/observation
+(`initial_state`/`observe`), transition (`step` → terminal/winner), and
+`legal_actions`. To make it agent-ready: add an action ↔ discrete-index map and a
+fixed-size `encode_observation(obs)` (variable-length tuples can't feed a
+network), then a thin Gymnasium `Env` wrapper (`reset`/`step` → obs, reward,
+terminated, truncated, info). The random player already consumes the engine
+exactly as such an agent would — an RL agent swaps in at the same boundary.
+
+**Concurrent simulation service.** Immutable states are thread-safe, so this is
+mostly plumbing: a game store (`id → GameState`), a serialization schema version
+for forward-compat, and a thin API (e.g. FastAPI) that calls `step` and persists
+`model_dump_json()` to Redis/a DB.
+
+**Tooling.** Add `mypy` and `bandit` to CI/pre-commit; structured logging in the
+frontend/service layer (the engine stays pure).
+
+**Deployment.** The package is uv/pip-installable with a `hanoi` entry point
+(`uvx hanoi …`, or `pip install .` then `hanoi …`); a service containerises the
+same package and exposes `step` behind an API + a state store.
+
 ## AI usage disclosure
 
 Per the brief, disclosing AI tool usage. I used Claude (Claude Code) for:
