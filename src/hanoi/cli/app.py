@@ -9,7 +9,7 @@ from rich.console import Console
 
 from hanoi.cli.render import render_board
 from hanoi.engine import GameState, Player, initial_state, observe, step
-from hanoi.io import ReplayParseError, parse_replay
+from hanoi.io import Move, ReplayParseError, parse_replay
 from hanoi.players import choose_action
 
 app = typer.Typer(
@@ -21,7 +21,10 @@ console = Console()
 
 
 @app.command()
-def replay(file: Annotated[Path, typer.Argument(help="Path to a moves DSL file.")]) -> None:
+def replay(
+    file: Annotated[Path, typer.Argument(help="Path to a moves DSL file.")],
+    trace: Annotated[bool, typer.Option(help="Print the board after every move.")] = False,
+) -> None:
     """Replay a recorded moves file; print the final state (board + JSON)."""
     try:
         game = parse_replay(file.read_text())
@@ -30,15 +33,26 @@ def replay(file: Annotated[Path, typer.Argument(help="Path to a moves DSL file."
         raise typer.Exit(code=1) from exc
 
     state = initial_state(game.n)
+    if trace:
+        console.print("[dim]initial position:[/]")
+        console.print(render_board(state))
     illegal = 0
-    for move in game.moves:
+    applied = 0
+    for i, move in enumerate(game.moves, start=1):
         result = step(state, move.player, move.action)
+        applied += 1
         if not result.was_legal:
             illegal += 1
         state = result.state
+        if trace:
+            tag = "" if result.was_legal else "  [red](illegal — wasted turn)[/]"
+            console.print(f"\n[bold]{i}. {_describe(move)}[/]{tag}")
+            console.print(render_board(state))
         if result.terminal:
             break
-    _report(state, steps=len(game.moves), illegal=illegal)
+    if trace:
+        console.print("")
+    _report(state, steps=applied, illegal=illegal)
 
 
 @app.command()
@@ -70,6 +84,12 @@ def _next_player(turn_order: str, i: int, rng: Random) -> Player:
     if turn_order == "random":
         return rng.choice((Player.A, Player.B))
     return Player.A if i % 2 == 0 else Player.B
+
+
+def _describe(move: Move) -> str:
+    action = move.action
+    pole = f" {action.pole}" if hasattr(action, "pole") else ""
+    return f"{move.player.value} {action.kind}{pole}"
 
 
 def _report(state: GameState, *, steps: int, illegal: int) -> None:

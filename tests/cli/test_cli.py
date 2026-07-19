@@ -15,6 +15,17 @@ def test_replay_spec_n1_reports_a_wins(tmp_path):
     assert "winner: A" in result.output
 
 
+def test_replay_trace_prints_a_board_per_move(tmp_path):
+    moves = tmp_path / "game.moves"
+    moves.write_text("n 1\nA lift 1\nB lift 1\nA place 3\n")
+    result = runner.invoke(app, ["replay", str(moves), "--trace"])
+    assert result.exit_code == 0
+    assert "initial position" in result.output
+    assert "1. A lift 1" in result.output
+    assert "3. A place 3" in result.output
+    assert result.output.count("SHARED:") == 5  # initial + 3 moves + final report
+
+
 def test_replay_reports_a_parse_error(tmp_path):
     moves = tmp_path / "bad.moves"
     moves.write_text("A lift 1\n")  # missing the n header
